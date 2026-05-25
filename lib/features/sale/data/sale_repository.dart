@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../domain/notification_item.dart';
 import '../domain/sale.dart';
 import '../domain/sale_event.dart';
 import 'notification_fetcher.dart';
@@ -24,17 +25,17 @@ class SyncResult {
   final int httpStatus;
   final int parsedEvents;
   final List<SaleEvent> newEvents;
+  final List<NotificationItem> allNotifications;
+  final int pagesFetched;
   final String? errorMessage;
-  final String? etag;
-  final String? lastModified;
   final bool needsLogin;
   const SyncResult({
     required this.httpStatus,
     required this.parsedEvents,
     required this.newEvents,
+    this.allNotifications = const [],
+    this.pagesFetched = 0,
     this.errorMessage,
-    this.etag,
-    this.lastModified,
     this.needsLogin = false,
   });
 
@@ -78,9 +79,11 @@ class SaleRepository {
         );
       }
       final allEvents = <SaleEvent>[];
+      final allNotifications = <NotificationItem>[];
       for (final p in fetched.pages) {
         if (p.html == null) continue;
         allEvents.addAll(_parser.parse(p.html!));
+        allNotifications.addAll(_parser.parseAll(p.html!));
       }
       // Dedup by (type, occurredAt) — same event may appear once per page
       // because intra lists older + newer items together depending on view.
@@ -93,6 +96,8 @@ class SaleRepository {
         httpStatus: 200,
         parsedEvents: unique.length,
         newEvents: applied,
+        allNotifications: allNotifications,
+        pagesFetched: fetched.pages.length,
       );
     } catch (e) {
       return SyncResult(
@@ -107,4 +112,5 @@ class SaleRepository {
   Future<List<Sale>> history() => _db.allSales();
   Future<Sale?> ongoing() => _db.ongoing();
   Future<Sale?> mostRecent() => _db.mostRecent();
+  Future<int> clearHistory() => _db.clearAll();
 }

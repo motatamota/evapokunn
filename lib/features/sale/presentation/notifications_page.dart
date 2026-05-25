@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:intl/intl.dart';
 
+import '../../../core/util/jst.dart';
 import 'notifications_state.dart';
 
 class NotificationsPage extends ConsumerStatefulWidget {
@@ -12,9 +12,22 @@ class NotificationsPage extends ConsumerStatefulWidget {
 }
 
 class _NotificationsPageState extends ConsumerState<NotificationsPage> {
-  static final _fmt = DateFormat('MM/dd HH:mm', 'ja');
+  static const _pattern = 'MM/dd HH:mm';
 
-  bool _saleOnly = true;
+  bool _saleOnly = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // If startup sync hasn't populated us yet (e.g. user opened the
+    // page mid-startup or startup failed), trigger a fetch.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final state = ref.read(notificationsProvider);
+      if (state.fetchedAt == null && !state.loading) {
+        ref.read(notificationsProvider.notifier).refresh();
+      }
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -43,14 +56,14 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
             child: SegmentedButton<bool>(
               segments: [
                 ButtonSegment(
-                  value: true,
-                  icon: const Icon(Icons.local_offer, size: 18),
-                  label: Text('えばぽせーる ($saleCount)'),
-                ),
-                ButtonSegment(
                   value: false,
                   icon: const Icon(Icons.notifications_none, size: 18),
                   label: Text('全部 ($totalCount)'),
+                ),
+                ButtonSegment(
+                  value: true,
+                  icon: const Icon(Icons.local_offer, size: 18),
+                  label: Text('えばぽせーる ($saleCount)'),
                 ),
               ],
               selected: {_saleOnly},
@@ -74,7 +87,7 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
               child: Text(
-                '取得: ${_fmt.format(state.fetchedAt!.toLocal())} '
+                '取得: ${fmtJst(state.fetchedAt!, _pattern)} '
                 '・ ${state.pagesFetched}ページ ・ 表示 ${visible.length}件',
                 style: Theme.of(context).textTheme.bodySmall,
               ),
@@ -126,7 +139,7 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
             maxLines: 3,
             overflow: TextOverflow.ellipsis,
           ),
-          subtitle: when == null ? null : Text(_fmt.format(when.toLocal())),
+          subtitle: when == null ? null : Text(fmtJst(when, _pattern)),
         );
       },
     );

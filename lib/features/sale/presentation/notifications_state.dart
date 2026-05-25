@@ -56,6 +56,28 @@ class NotificationsNotifier extends StateNotifier<NotificationsState> {
   /// True when we've never fetched data in this app session.
   bool get isEmpty => state.fetchedAt == null && state.items.isEmpty;
 
+  void setLoading(bool loading) {
+    state = state.copyWith(loading: loading, error: null);
+  }
+
+  /// Populate state from already-fetched data (typically by
+  /// [performSync] on startup) so the notifications page can show
+  /// content instantly without re-fetching.
+  void setData(List<NotificationItem> items, int pagesFetched) {
+    final sorted = [...items]
+      ..sort((a, b) {
+        final ax = a.occurredAt ?? DateTime.fromMicrosecondsSinceEpoch(0);
+        final bx = b.occurredAt ?? DateTime.fromMicrosecondsSinceEpoch(0);
+        return bx.compareTo(ax);
+      });
+    state = NotificationsState(
+      items: sorted,
+      fetchedAt: DateTime.now(),
+      pagesFetched: pagesFetched,
+      loading: false,
+    );
+  }
+
   Future<void> refresh() async {
     if (state.loading) return;
     state = state.copyWith(loading: true, error: null);

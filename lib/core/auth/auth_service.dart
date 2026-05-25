@@ -44,6 +44,25 @@ class AuthService {
     _http.cookieJar.deleteAll();
   }
 
+  /// Resolves the logged-in user's login (e.g. "ahirayam") by
+  /// inspecting where `/users/me` redirects to. Returns null if not
+  /// authenticated or the redirect target is unexpected.
+  Future<String?> fetchUsername() async {
+    final res = await _http.dio.get(
+      '/users/me',
+      options: Options(
+        followRedirects: false,
+        validateStatus: (c) => c != null && c < 500,
+      ),
+    );
+    if (res.statusCode != 302) return null;
+    final location = res.headers.value('location') ?? '';
+    final match = RegExp(r'/users/([^/?#]+)').firstMatch(location);
+    final login = match?.group(1);
+    if (login == null || login == 'me') return null;
+    return login;
+  }
+
   Future<List<Cookie>> sessionCookies() {
     return _http.cookieJar.loadForRequest(Uri.parse(baseUrl));
   }

@@ -1,12 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:intl/intl.dart';
-
+import '../../../core/auth/auth_service.dart';
+import '../../../core/auth/auth_status.dart';
+import '../../../core/auth/web_login_page.dart';
+import '../../../core/notifications/notification_service.dart';
 import '../../../core/settings/app_settings.dart';
+import '../../../core/util/jst.dart';
+import '../data/evaluation_fetcher.dart';
 import '../data/sale_repository.dart';
+import '../data/sync_runner.dart';
 import '../domain/sale.dart';
 import '../domain/sale_predictor.dart';
 import '../../settings/settings_page.dart';
+import 'evaluations_state.dart';
+import 'notifications_state.dart';
 import 'history_page.dart';
 import 'notifications_page.dart';
 import 'raw_html_page.dart';
@@ -20,37 +27,147 @@ final historyProvider = FutureProvider<List<Sale>>((ref) async {
 
 final lastSyncProvider = StateProvider<DateTime?>((_) => null);
 
-class HomePage extends ConsumerWidget {
-  const HomePage({super.key});
-
-  static final _dateFmt = DateFormat('yyyy/MM/dd HH:mm', 'ja');
-
-  Future<void> _refresh(BuildContext context, WidgetRef ref) async {
+/// Fires once on app start: pulls 1 page of notifications and applies
+/// it to the DB so the user sees fresh data immediately and any new
+/// sale events trigger local push notifications.
+/// Single fetch at app start. The result feeds the notifications list,
+/// the evaluations card and the sale DB so the home and notifications
+/// pages display data immediately without re-fetching.
+final startupSyncProvider = FutureProvider<void>((ref) async {
+  try {
     final repo = await ref.read(saleRepositoryProvider.future);
-    final pages = ref.read(fetchPagesProvider);
-    final result = await repo.sync(pages: pages);
+    final notifier = ref.read(notificationServiceProvider);
+    final evalFetcher = await ref.read(evaluationFetcherProvider.future);
+    final outcome = await performSync(
+      repo: repo,
+      notifier: notifier,
+      evalFetcher: evalFetcher,
+      pages: 1,
+    );
+    if (!outcome.sale.isError && !outcome.sale.needsLogin) {
+      ref.read(notificationsProvider.notifier).setData(
+            outcome.sale.allNotifications,
+            outcome.sale.pagesFetched,
+          );
+    }
+    if (outcome.evaluations.needsLogin) {
+      ref.read(evaluationsProvider.notifier).setNeedsLogin();
+    } else if (outcome.evaluations.error != null) {
+      ref
+          .read(evaluationsProvider.notifier)
+          .setError(outcome.evaluations.error!);
+    } else {
+      ref
+          .read(evaluationsProvider.notifier)
+          .setData(outcome.evaluations.items);
+    }
     ref.read(lastSyncProvider.notifier).state = DateTime.now();
     ref.invalidate(historyProvider);
-    if (!context.mounted) return;
-    if (result.needsLogin) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('ログインが必要です (Settings から)')),
+  } catch (_) {
+    // Best effort; user can still manually refresh.
+  }
+});
+
+class HomePage extends ConsumerStatefulWidget {
+  const HomePage({super.key});
+
+  @override
+  ConsumerState<HomePage> createState() => _HomePageState();
+}
+
+class _HomePageState extends ConsumerState<HomePage> {
+  static const _datePattern = 'yyyy/MM/dd HH:mm';
+
+  Future<void> _openWebLogin() async {
+    final http = await ref.read(httpClientProvider.future);
+    if (!mounted) return;
+    final ok = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(builder: (_) => WebLoginPage(httpClient: http)),
+    );
+    ref.invalidate(authStatusProvider);
+    if (ok == true) {
+      final repo = await ref.read(saleRepositoryProvider.future);
+      final notifier = ref.read(notificationServiceProvider);
+      final evalFetcher = await ref.read(evaluationFetcherProvider.future);
+      final outcome = await performSync(
+        repo: repo,
+        notifier: notifier,
+        evalFetcher: evalFetcher,
+        pages: 1,
       );
-    } else if (result.isError) {
+      if (!outcome.sale.isError && !outcome.sale.needsLogin) {
+        ref.read(notificationsProvider.notifier).setData(
+              outcome.sale.allNotifications,
+              outcome.sale.pagesFetched,
+            );
+      }
+      if (!outcome.evaluations.needsLogin &&
+          outcome.evaluations.error == null) {
+        ref
+            .read(evaluationsProvider.notifier)
+            .setData(outcome.evaluations.items);
+      }
+      if (!mounted) return;
+      ref.read(lastSyncProvider.notifier).state = DateTime.now();
+      ref.invalidate(historyProvider);
+    }
+  }
+
+  Future<void> _refresh() async {
+    final repo = await ref.read(saleRepositoryProvider.future);
+    final notifier = ref.read(notificationServiceProvider);
+    final evalFetcher = await ref.read(evaluationFetcherProvider.future);
+    final pages = ref.read(fetchPagesProvider);
+    // Show loading spinners on the two cards while the single sync runs.
+    ref.read(notificationsProvider.notifier).setLoading(true);
+    ref.read(evaluationsProvider.notifier).setLoading(true);
+    final outcome = await performSync(
+      repo: repo,
+      notifier: notifier,
+      evalFetcher: evalFetcher,
+      pages: pages,
+    );
+    if (!outcome.sale.isError && !outcome.sale.needsLogin) {
+      ref.read(notificationsProvider.notifier).setData(
+            outcome.sale.allNotifications,
+            outcome.sale.pagesFetched,
+          );
+    } else {
+      ref.read(notificationsProvider.notifier).setLoading(false);
+    }
+    if (!outcome.evaluations.needsLogin && outcome.evaluations.error == null) {
+      ref
+          .read(evaluationsProvider.notifier)
+          .setData(outcome.evaluations.items);
+    } else {
+      ref.read(evaluationsProvider.notifier).setLoading(false);
+    }
+    ref.read(lastSyncProvider.notifier).state = DateTime.now();
+    ref.invalidate(historyProvider);
+    if (!mounted) return;
+    if (outcome.sale.needsLogin) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('取得失敗: ${result.errorMessage}')),
+        const SnackBar(content: Text('ログインが必要です')),
+      );
+      _openWebLogin();
+    } else if (outcome.sale.isError) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('取得失敗: ${outcome.sale.errorMessage}')),
       );
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(
-          '$pagesページ確認 / 新規 ${result.newEvents.length}件',
+          '$pagesページ確認 / 新規 ${outcome.sale.newEvents.length}件',
         )),
       );
     }
   }
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
+    // Fires once per app session — kicks the startup fetch and lets
+    // the result update history/lastSync providers.
+    ref.watch(startupSyncProvider);
     final history = ref.watch(historyProvider);
     final lastSync = ref.watch(lastSyncProvider);
     return Scaffold(
@@ -87,7 +204,7 @@ class HomePage extends ConsumerWidget {
         ],
       ),
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => _refresh(context, ref),
+        onPressed: _refresh,
         icon: const Icon(Icons.refresh),
         label: const Text('更新'),
       ),
@@ -102,6 +219,9 @@ class HomePage extends ConsumerWidget {
           return ListView(
             padding: const EdgeInsets.all(16),
             children: [
+              _sectionTitle(context, '今後のレビュー予約'),
+              _EvaluationsCard(),
+              const SizedBox(height: 16),
               _sectionTitle(context, '現在のえばぽせーる'),
               if (ongoing.isNotEmpty)
                 _saleCard(context, ongoing.first, ongoingHighlight: true)
@@ -129,7 +249,7 @@ class HomePage extends ConsumerWidget {
               const SizedBox(height: 16),
               if (lastSync != null)
                 Text(
-                  '最終取得: ${_dateFmt.format(lastSync)}',
+                  '最終取得: ${fmtJst(lastSync, _datePattern)}',
                   style: Theme.of(context).textTheme.bodySmall,
                   textAlign: TextAlign.center,
                 ),
@@ -149,7 +269,7 @@ class HomePage extends ConsumerWidget {
     final color = ongoingHighlight
         ? Theme.of(c).colorScheme.primaryContainer
         : null;
-    final endText = s.endAt == null ? '進行中' : _dateFmt.format(s.endAt!.toLocal());
+    final endText = s.endAt == null ? '進行中' : fmtJst(s.endAt!, _datePattern);
     return Card(
       color: color,
       child: Padding(
@@ -159,7 +279,7 @@ class HomePage extends ConsumerWidget {
           children: [
             Text(s.title, style: Theme.of(c).textTheme.titleSmall),
             const SizedBox(height: 6),
-            Text('開始: ${_dateFmt.format(s.startAt.toLocal())}'),
+            Text('開始: ${fmtJst(s.startAt, _datePattern)}'),
             Text('終了: $endText'),
           ],
         ),
@@ -180,10 +300,71 @@ class HomePage extends ConsumerWidget {
     return Card(
       child: ListTile(
         leading: const Icon(Icons.event_available),
-        title: Text(_dateFmt.format(p.expectedStart.toLocal())),
+        title: Text(fmtJst(p.expectedStart, _datePattern)),
         subtitle: Text(
           '±${p.uncertainty.inHours}時間 (サンプル${p.sampleSize}件)',
         ),
+      ),
+    );
+  }
+}
+
+class _EvaluationsCard extends ConsumerWidget {
+  static const _pattern = 'MM/dd HH:mm';
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final state = ref.watch(evaluationsProvider);
+    if (state.loading && state.fetchedAt == null) {
+      return const Card(
+        child: ListTile(
+          leading: SizedBox(
+            width: 24,
+            height: 24,
+            child: CircularProgressIndicator(strokeWidth: 2),
+          ),
+          title: Text('レビュー予約を確認中…'),
+        ),
+      );
+    }
+    if (state.needsLogin) {
+      return const Card(
+        child: ListTile(
+          leading: Icon(Icons.lock_outline),
+          title: Text('ログインが必要'),
+          subtitle: Text('Settings から WebView ログイン'),
+        ),
+      );
+    }
+    if (state.error != null) {
+      return Card(
+        child: ListTile(
+          leading: const Icon(Icons.error_outline),
+          title: Text('取得失敗: ${state.error}'),
+        ),
+      );
+    }
+    if (state.items.isEmpty) {
+      return const Card(
+        child: ListTile(
+          leading: Icon(Icons.event_busy),
+          title: Text('レビュー予約はありません'),
+        ),
+      );
+    }
+    return Card(
+      child: Column(
+        children: [
+          for (final e in state.items)
+            ListTile(
+              dense: true,
+              leading: const Icon(Icons.assignment_ind, color: Colors.teal),
+              title: Text(e.text, maxLines: 2, overflow: TextOverflow.ellipsis),
+              subtitle: e.when == null
+                  ? null
+                  : Text(fmtJst(e.when!, _pattern)),
+            ),
+        ],
       ),
     );
   }

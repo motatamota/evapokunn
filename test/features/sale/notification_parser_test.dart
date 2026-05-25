@@ -74,6 +74,35 @@ ${_item(
       expect(events.map((e) => e.type), [SaleEventType.start, SaleEventType.end]);
     });
 
+    test('ignores the "sales will start in two days" announcement', () {
+      // Real intra wording (category prefix + body) for the
+      // "pool is full" pre-announcement. It contains
+      // "Evaluation points sales" AND "start" but is NOT a real start
+      // event.
+      final html = _page(items: _item(
+        body: "Evaluation points sales "
+            "Cursus 42cursus's evaluation points pool is full. "
+            "Sales will start in two days, (20/05/2026 13:10).",
+        datetime: '2026-05-18T13:10:00+09:00',
+      ));
+      expect(parser.parse(html), isEmpty);
+      // Still flagged as sale-related in the all-notifications view.
+      final all = parser.parseAll(html);
+      expect(all, hasLength(1));
+      expect(all.first.isSaleRelated, isTrue);
+    });
+
+    test('strips repeated category prefix from body text', () {
+      final html = _page(items: _item(
+        body:
+            'Evaluation points sales Evaluation points sales are now over.',
+        datetime: '2026-05-20T18:25:00+09:00',
+      ));
+      final ev = parser.parse(html).single;
+      expect(ev.type, SaleEventType.end);
+      expect(ev.rawTitle, 'Evaluation points sales are now over.');
+    });
+
     test('ignores non-sale notifications', () {
       final html = _page(items: '''
 ${_item(body: 'You have been invited to evaluate someone')}

@@ -26,14 +26,24 @@ import '../domain/sale_event.dart';
 class NotificationParser {
   static const _jstOffset = Duration(hours: 9);
 
-  /// Anchor phrase — both start and end notifications contain this.
+  /// Anchor phrase — every sale-related notification contains this.
   static final _saleAnchor = RegExp(
     r'evaluation\s+points?\s+sales',
     caseSensitive: false,
   );
-  static final _saleEnd = RegExp(r'\b(over|ended|finished)\b', caseSensitive: false);
-  static final _saleStart = RegExp(
-    r'\b(starting|started|start|begin|now\s+on)\b',
+
+  /// True "the sale just started" wording. Must match the actual phrase
+  /// from intra, not just any occurrence of "start" — the "pool is full,
+  /// sales will start in two days" announcement also contains "start"
+  /// but is not a real start event.
+  static final _saleStartingNow = RegExp(
+    r'are\s+now\s+starting',
+    caseSensitive: false,
+  );
+
+  /// True "the sale just ended" wording.
+  static final _saleNowOver = RegExp(
+    r'are\s+now\s+over',
     caseSensitive: false,
   );
 
@@ -79,8 +89,27 @@ class NotificationParser {
 
   String _bodyText(Element a) {
     final body = a.querySelector('.notification-item--body');
-    final raw = (body ?? a).text;
-    return raw.replaceAll(RegExp(r'\s+'), ' ').trim();
+    final raw = (body ?? a).text.replaceAll(RegExp(r'\s+'), ' ').trim();
+    return _stripRepeatedPrefix(raw);
+  }
+
+  /// intra renders the notification as `[category] [body]` and the body
+  /// itself often starts with the same words as the category — yielding
+  /// "Evaluation points sales Evaluation points sales are now over."
+  /// when we read .text. Drop the leading repeat.
+  static String _stripRepeatedPrefix(String s) {
+    final words = s.split(' ');
+    for (var n = words.length ~/ 2; n >= 1; n--) {
+      var match = true;
+      for (var i = 0; i < n; i++) {
+        if (words[i] != words[i + n]) {
+          match = false;
+          break;
+        }
+      }
+      if (match) return words.sublist(n).join(' ');
+    }
+    return s;
   }
 
   String? _href(Element a) {
@@ -105,8 +134,8 @@ class NotificationParser {
   }
 
   SaleEventType? _detectType(String text) {
-    if (_saleEnd.hasMatch(text)) return SaleEventType.end;
-    if (_saleStart.hasMatch(text)) return SaleEventType.start;
+    if (_saleNowOver.hasMatch(text)) return SaleEventType.end;
+    if (_saleStartingNow.hasMatch(text)) return SaleEventType.start;
     return null;
   }
 

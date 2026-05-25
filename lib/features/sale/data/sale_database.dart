@@ -36,6 +36,10 @@ class SaleDatabase extends _$SaleDatabase {
   @override
   int get schemaVersion => 1;
 
+  Future<int> clearAll() async {
+    return delete(sales).go();
+  }
+
   Future<List<Sale>> allSales() async {
     final rows = await (select(sales)
           ..orderBy([(t) => OrderingTerm.desc(t.startAt)]))
@@ -85,6 +89,14 @@ class SaleDatabase extends _$SaleDatabase {
           ));
           newOrChanged.add(ev);
         } else {
+          // Idempotency: if any sale is already closed at this exact end
+          // time, skip — we've already processed this end event.
+          final alreadyClosed = await (select(sales)
+                ..where((t) => t.endAt.equals(ev.occurredAt))
+                ..limit(1))
+              .getSingleOrNull();
+          if (alreadyClosed != null) continue;
+
           final open = await (select(sales)
                 ..where((t) =>
                     t.endAt.isNull() & t.startAt.isSmallerThanValue(ev.occurredAt))

@@ -1,13 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:intl/intl.dart';
 
+import '../../../core/util/jst.dart';
 import 'home_page.dart';
 
 class HistoryPage extends ConsumerWidget {
   const HistoryPage({super.key});
 
-  static final _fmt = DateFormat('yyyy/MM/dd HH:mm', 'ja');
+  static const _pattern = 'yyyy/MM/dd HH:mm';
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -33,8 +33,8 @@ class HistoryPage extends ConsumerWidget {
               return ListTile(
                 title: Text(s.title, maxLines: 2, overflow: TextOverflow.ellipsis),
                 subtitle: Text(
-                  '${_fmt.format(s.startAt.toLocal())} → '
-                  '${s.endAt == null ? '...' : _fmt.format(s.endAt!.toLocal())}',
+                  '${fmtJst(s.startAt, _pattern)} → '
+                  '${s.endAt == null ? '...' : fmtJst(s.endAt!, _pattern)}',
                 ),
                 trailing: Text(durText),
               );

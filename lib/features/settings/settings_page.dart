@@ -2,13 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/auth/auth_service.dart';
+import '../../core/auth/auth_status.dart';
 import '../../core/auth/web_login_page.dart';
 import '../../core/settings/app_settings.dart';
-
-final authStatusProvider = FutureProvider<bool>((ref) async {
-  final auth = await ref.watch(authServiceProvider.future);
-  return auth.ensureAuthenticated();
-});
+import '../../core/settings/theme_mode.dart';
+import '../sale/data/sale_repository.dart';
+import '../sale/presentation/home_page.dart';
 
 class SettingsPage extends ConsumerWidget {
   const SettingsPage({super.key});
@@ -20,9 +19,42 @@ class SettingsPage extends ConsumerWidget {
       MaterialPageRoute(builder: (_) => WebLoginPage(httpClient: http)),
     );
     ref.invalidate(authStatusProvider);
+    ref.invalidate(usernameProvider);
     if (ok == true && context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('ログイン成功')),
+      );
+    }
+  }
+
+  Future<void> _clearHistory(BuildContext context, WidgetRef ref) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('履歴を削除しますか？'),
+        content: const Text(
+          'えばぽせーる履歴の DB を空にします。'
+          '次回更新時に再構築されます。',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('キャンセル'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('削除'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    final repo = await ref.read(saleRepositoryProvider.future);
+    final n = await repo.clearHistory();
+    ref.invalidate(historyProvider);
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('$n件削除しました')),
       );
     }
   }
@@ -31,6 +63,7 @@ class SettingsPage extends ConsumerWidget {
     final auth = await ref.read(authServiceProvider.future);
     await auth.logout();
     ref.invalidate(authStatusProvider);
+    ref.invalidate(usernameProvider);
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('ログアウトしました')),
@@ -41,8 +74,10 @@ class SettingsPage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final status = ref.watch(authStatusProvider);
+    final username = ref.watch(usernameProvider);
     final pages = ref.watch(fetchPagesProvider);
     final notifier = ref.read(fetchPagesProvider.notifier);
+    final theme = ref.watch(themeModeProvider);
     return Scaffold(
       appBar: AppBar(title: const Text('Settings')),
       body: ListView(
@@ -64,7 +99,11 @@ class SettingsPage extends ConsumerWidget {
               ),
               title: Text(
                 status.maybeWhen(
-                  data: (ok) => ok ? 'ログイン中' : '未ログイン',
+                  data: (ok) {
+                    if (!ok) return '未ログイン';
+                    final name = username.asData?.value;
+                    return name != null ? 'ログイン中: $name' : 'ログイン中';
+                  },
                   orElse: () => '確認中…',
                 ),
               ),
@@ -104,6 +143,53 @@ class SettingsPage extends ConsumerWidget {
             label: const Text('Cookie を消去 (ログアウト)'),
           ),
           const SizedBox(height: 24),
+          OutlinedButton.icon(
+            onPressed: () => _clearHistory(context, ref),
+            icon: const Icon(Icons.delete_outline),
+            label: const Text('えばぽせーる履歴を削除'),
+          ),
+          const SizedBox(height: 16),
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      const Icon(Icons.brightness_6),
+                      const SizedBox(width: 8),
+                      Text('テーマ', style: Theme.of(context).textTheme.titleSmall),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  SegmentedButton<ThemeMode>(
+                    segments: const [
+                      ButtonSegment(
+                        value: ThemeMode.system,
+                        icon: Icon(Icons.brightness_auto),
+                        label: Text('自動'),
+                      ),
+                      ButtonSegment(
+                        value: ThemeMode.light,
+                        icon: Icon(Icons.light_mode),
+                        label: Text('ライト'),
+                      ),
+                      ButtonSegment(
+                        value: ThemeMode.dark,
+                        icon: Icon(Icons.dark_mode),
+                        label: Text('ダーク'),
+                      ),
+                    ],
+                    selected: {theme},
+                    onSelectionChanged: (s) =>
+                        ref.read(themeModeProvider.notifier).set(s.first),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
           Card(
             child: Padding(
               padding: const EdgeInsets.all(12),
