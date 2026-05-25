@@ -1,0 +1,61 @@
+name: sale_tracker
+description: "42Tokyo sale tracker - notifies sale start/end/next predictions."
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.5.4
+
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: ^1.0.8
+
+  # HTTP + Cookie session management
+  dio: ^5.4.0
+  cookie_jar: ^4.0.8
+  dio_cookie_manager: ^3.1.1
+
+  # HTML parsing
+  html: ^0.15.4
+
+  # WebView for OAuth/SSO login flow (Keycloak + 2FA).
+  # flutter_inappwebview exposes a CookieManager that can read HttpOnly
+  # cookies — needed for the Rails session cookie set by intra.42.fr.
+  flutter_inappwebview: ^6.1.5
+
+  # Secure credential storage
+  flutter_secure_storage: ^9.0.0
+
+  # Local DB
+  drift: ^2.14.0
+  sqlite3_flutter_libs: ^0.5.0
+  path_provider: ^2.1.0
+  path: ^1.8.0
+
+  # Background execution
+  workmanager: ^0.5.2
+
+  # Local notifications
+  flutter_local_notifications: ^17.2.3
+  timezone: ^0.9.2
+
+  # State management
+  flutter_riverpod: ^2.4.0
+
+  # Date utilities
+  intl: ^0.19.0
+
+  # App settings (page count etc.)
+  shared_preferences: ^2.2.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^4.0.0
+  drift_dev: ^2.14.0
+  build_runner: ^2.4.0
+  sqlite3: ^2.4.0
+
+flutter:
+  uses-material-design: true

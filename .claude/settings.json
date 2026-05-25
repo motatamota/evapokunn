@@ -1,0 +1,37 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(flutter --version)",
+      "Read(//usr/local/**)",
+      "Read(//mnt/c/**)",
+      "Read(//mnt/c/src/**)",
+      "Read(//mnt/c/dev/**)",
+      "Read(//home/motata/snap/**)",
+      "Read(//home/motata/**)",
+      "Read(//home/motata/development/**)",
+      "Bash(snap list *)",
+      "Read(//snap/bin/**)",
+      "Bash(cmd.exe /c \"where flutter\")",
+      "Bash(cmd.exe /c \"flutter --version\")",
+      "Bash(df -h ~ | head -3; echo \"---\"; cat /etc/os-release | head -5)",
+      "Read(//usr/lib/**)",
+      "Bash(dpkg -l)",
+      "Bash(awk '{print $2}')",
+      "Bash(curl -fsSL -o flutter_linux_stable.tar.xz \"https://storage.googleapis.com/flutter_infra_release/releases/stable/linux/flutter_linux_3.24.5-stable.tar.xz\")",
+      "Bash(tar xf *)",
+      "Bash(rm flutter_linux_stable.tar.xz)",
+      "Bash(~/flutter/bin/flutter --version)",
+      "Bash(grep -q \"flutter/bin\" ~/.bashrc || echo 'export PATH=\"$HOME/flutter/bin:$PATH\"' >> ~/.bashrc && tail -3 ~/.bashrc)",
+      "Bash(sudo apt-get update -qq)",
+      "Bash(sudo apt-get install -y libsqlite3-dev)",
+      "Bash(cmd.exe /c \"where adb\")",
+      "Read(//tmp/**)",
+      "Bash(curl -fsSL -o cmdline-tools.zip \"https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip\")",
+      "Bash(rm /tmp/cmdline-tools.zip 2>/dev/null; echo \"cleaned up\")"
+    ],
+    "additionalDirectories": [
+      "/home/motata",
+      "/tmp"
+    ]
+  }
+}

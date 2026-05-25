@@ -1,0 +1,62 @@
+﻿
+Running Gradle task 'assembleDebug'...                          
+Warning: The plugin sqlite3_flutter_libs requires Android SDK version 35 or higher.
+For more information about build configuration, see https://flutter.dev/to/review-gradle-config.
+flutter : Your project is configured to compile against Android SDK 34, but the following plugin(s) require to be compi
+led against a higher Android SDK version:
+発生場所 行:1 文字:1
++ flutter build apk --debug 2>&1 | Out-File -FilePath build_log.txt -En ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (Your project is...id SDK version::String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+- sqlite3_flutter_libs compiles against Android SDK 35
+Fix this issue by compiling against the highest Android SDK version (they are backward compatible).
+Add the following to C:\Users\DELL\Desktop\42Tokyo\notify_app\android\app\build.gradle:
+
+    android {
+        compileSdk = 35
+        ...
+    }
+
+Checking the license for package Android SDK Platform 33 in C:\Users\DELL\AppData\Local\Android\Sdk\licenses
+License for package Android SDK Platform 33 accepted.
+Preparing "Install Android SDK Platform 33 (revision 3)".
+"Install Android SDK Platform 33 (revision 3)" ready.
+Installing Android SDK Platform 33 in C:\Users\DELL\AppData\Local\Android\Sdk\platforms\android-33
+"Install Android SDK Platform 33 (revision 3)" complete.
+"Install Android SDK Platform 33 (revision 3)" finished.
+Checking the license for package Android SDK Platform 35 in C:\Users\DELL\AppData\Local\Android\Sdk\licenses
+License for package Android SDK Platform 35 accepted.
+Preparing "Install Android SDK Platform 35 (revision 2)".
+"Install Android SDK Platform 35 (revision 2)" ready.
+Installing Android SDK Platform 35 in C:\Users\DELL\AppData\Local\Android\Sdk\platforms\android-35
+"Install Android SDK Platform 35 (revision 2)" complete.
+"Install Android SDK Platform 35 (revision 2)" finished.
+・ｽx・ｽ・ｽ: [options] ・ｽ\・ｽ[・ｽX・ｽl8・ｽﾍ廃・ｽ~・ｽ・ｽ・ｽ・ｽﾄゑｿｽ・ｽﾄ、・ｽ・ｽ・ｽ・ｽﾌ・ｿｽ・ｽ・ｽ・ｽ[・ｽX・ｽﾅ削除・ｽ・ｽ・ｽ・ｽ・ｽ\・ｽ・ｽﾅゑｿｽ
+・ｽx・ｽ・ｽ: [options] ・ｽ^・ｽ[・ｽQ・ｽb・ｽg・ｽl8・ｽﾍ廃・ｽ~・ｽ・ｽ・ｽ・ｽﾄゑｿｽ・ｽﾄ、・ｽ・ｽ・ｽ・ｽﾌ・ｿｽ・ｽ・ｽ・ｽ[・ｽX・ｽﾅ削除・ｽ・ｽ・ｽ・ｽ・ｽ\・ｽ・ｽﾅゑｿｽ
+・ｽx・ｽ・ｽ: [options] ・ｽp・ｽ~・ｽ・ｽ・ｽ黷ｽ・ｽI・ｽv・ｽV・ｽ・ｽ・ｽ・ｽ・ｽﾉつゑｿｽ・ｽﾄの警・ｽ・ｽ・ｽ・ｽ\・ｽ・ｽ・ｽ・ｽ・ｽﾈゑｿｽ・ｽ謔､・ｽﾉゑｿｽ・ｽ・ｽﾉは、-Xlint:・ｽI・ｽv・ｽV・
+ｽ・ｽ・ｽ・ｽ・ｽ・ｽ・ｽg・ｽp・ｽ・ｽ・ｽﾜゑｿｽ・ｽB
+C:\Users\DELL\AppData\Local\Pub\Cache\hosted\pub.dev\flutter_local_notifications-16.3.3\android\src\main\java\com\dexte
+rous\flutterlocalnotifications\FlutterLocalNotificationsPlugin.java:1033: ・ｽG・ｽ・ｽ・ｽ[: bigLargeIcon・ｽﾌ参・ｽﾆはゑｿｽ・ｽ・ｽ・ｽﾜゑｿｽ
+・ｽﾅゑｿｽ
+      bigPictureStyle.bigLargeIcon(null);
+                     ^
+  BigPictureStyle・ｽﾌ・ｿｽ・ｽ\・ｽb・ｽh bigLargeIcon(Bitmap)・ｽ・ｽBigPictureStyle・ｽﾌ・ｿｽ・ｽ\・ｽb・ｽh bigLargeIcon(Icon)・ｽﾌ暦ｿｽ・ｽ・ｽ・ｽ・
+ｽ・ｽ・ｽv・ｽ・ｽ・ｽﾜゑｿｽ
+・ｽG・ｽ・ｽ・ｽ[1・ｽ・ｽ
+・ｽx・ｽ・ｽ3・ｽ・ｽ
+
+FAILURE: Build failed with an exception.
+
+* What went wrong:
+Execution failed for task ':flutter_local_notifications:compileDebugJavaWithJavac'.
+> Compilation failed; see the compiler error output for details.
+
+* Try:
+> Run with --info option to get more log output.
+> Run with --scan to get full insights.
+
+BUILD FAILED in 1m 49s
+Running Gradle task 'assembleDebug'...                            110.1s
+Gradle task assembleDebug failed with exit code 1
