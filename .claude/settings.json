@@ -27,7 +27,8 @@
       "Bash(cmd.exe /c \"where adb\")",
       "Read(//tmp/**)",
       "Bash(curl -fsSL -o cmdline-tools.zip \"https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip\")",
-      "Bash(rm /tmp/cmdline-tools.zip 2>/dev/null; echo \"cleaned up\")"
+      "Bash(rm /tmp/cmdline-tools.zip 2>/dev/null; echo \"cleaned up\")",
+      "Bash(git ls-remote *)"
     ],
     "additionalDirectories": [
       "/home/motata",
