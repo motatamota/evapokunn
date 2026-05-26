@@ -1,10 +1,10 @@
-name: Build iOS IPA
+name: iOS
 
 on:
   workflow_dispatch:
   push:
     tags:
-      - 'ios-v*'
+      - "ios-v*"
 
 permissions:
   contents: write
@@ -14,39 +14,41 @@ jobs:
     runs-on: macos-latest
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      - uses: subosito/flutter-action@v2
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.24.5'
-          channel: 'stable'
+          flutter-version: "3.24.5"
+          channel: stable
 
-      - name: Flutter pub get
+      - name: Pub get
         run: flutter pub get
 
       - name: Pod install
-        run: cd ios && pod install --repo-update
+        run: |
+          cd ios
+          pod install --repo-update
 
-      - name: Build iOS (no codesign)
+      - name: Build (no codesign)
         run: flutter build ios --release --no-codesign
 
-      - name: Package unsigned IPA
+      - name: Package IPA
         run: |
           cd build/ios/iphoneos
           mkdir Payload
           mv Runner.app Payload/
           zip -qr ebapokun-unsigned.ipa Payload/
-          ls -lh ebapokun-unsigned.ipa
 
-      - uses: actions/upload-artifact@v4
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
         with:
           name: ebapokun-ipa
           path: build/ios/iphoneos/ebapokun-unsigned.ipa
-          retention-days: 30
 
-      - name: Release on tag push
+      - name: Release
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
           files: build/ios/iphoneos/ebapokun-unsigned.ipa
-          generate_release_notes: true
