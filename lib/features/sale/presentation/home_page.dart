@@ -27,22 +27,24 @@ final historyProvider = FutureProvider<List<Sale>>((ref) async {
 
 final lastSyncProvider = StateProvider<DateTime?>((_) => null);
 
-/// Fires once on app start: pulls 1 page of notifications and applies
-/// it to the DB so the user sees fresh data immediately and any new
-/// sale events trigger local push notifications.
-/// Single fetch at app start. The result feeds the notifications list,
-/// the evaluations card and the sale DB so the home and notifications
-/// pages display data immediately without re-fetching.
-final startupSyncProvider = FutureProvider<void>((ref) async {
+/// Pulls `fetch_pages` worth of notifications and pushes the result
+/// into every UI state.
+///
+/// - **First watch** (home page first build): runs automatically.
+/// - **`ref.refresh(homeSyncProvider.future)`**: re-runs on demand,
+///   used by pull-to-refresh on home / notifications and by the
+///   app-resume hook.
+final homeSyncProvider = FutureProvider<void>((ref) async {
   try {
     final repo = await ref.read(saleRepositoryProvider.future);
     final notifier = ref.read(notificationServiceProvider);
     final evalFetcher = await ref.read(evaluationFetcherProvider.future);
+    final pages = ref.read(fetchPagesProvider);
     final outcome = await performSync(
       repo: repo,
       notifier: notifier,
       evalFetcher: evalFetcher,
-      pages: 1,
+      pages: pages,
     );
     if (!outcome.sale.isError && !outcome.sale.needsLogin) {
       ref.read(notificationsProvider.notifier).setData(
@@ -75,8 +77,35 @@ class HomePage extends ConsumerStatefulWidget {
   ConsumerState<HomePage> createState() => _HomePageState();
 }
 
-class _HomePageState extends ConsumerState<HomePage> {
+class _HomePageState extends ConsumerState<HomePage>
+    with WidgetsBindingObserver {
   static const _datePattern = 'yyyy/MM/dd HH:mm';
+
+  /// Skip auto-resume refresh if we synced very recently — avoids
+  /// hammering the intra when the user just switches between apps.
+  static const _resumeThrottle = Duration(seconds: 30);
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state != AppLifecycleState.resumed) return;
+    final last = ref.read(lastSyncProvider);
+    if (last != null && DateTime.now().difference(last) < _resumeThrottle) {
+      return;
+    }
+    ref.invalidate(homeSyncProvider);
+  }
 
   Future<void> _openWebLogin() async {
     final http = await ref.read(httpClientProvider.future);
@@ -86,88 +115,29 @@ class _HomePageState extends ConsumerState<HomePage> {
     );
     ref.invalidate(authStatusProvider);
     if (ok == true) {
-      final repo = await ref.read(saleRepositoryProvider.future);
-      final notifier = ref.read(notificationServiceProvider);
-      final evalFetcher = await ref.read(evaluationFetcherProvider.future);
-      final outcome = await performSync(
-        repo: repo,
-        notifier: notifier,
-        evalFetcher: evalFetcher,
-        pages: 1,
-      );
-      if (!outcome.sale.isError && !outcome.sale.needsLogin) {
-        ref.read(notificationsProvider.notifier).setData(
-              outcome.sale.allNotifications,
-              outcome.sale.pagesFetched,
-            );
-      }
-      if (!outcome.evaluations.needsLogin &&
-          outcome.evaluations.error == null) {
-        ref
-            .read(evaluationsProvider.notifier)
-            .setData(outcome.evaluations.items);
-      }
-      if (!mounted) return;
-      ref.read(lastSyncProvider.notifier).state = DateTime.now();
-      ref.invalidate(historyProvider);
+      ref.invalidate(homeSyncProvider);
+      await ref.read(homeSyncProvider.future);
     }
   }
 
   Future<void> _refresh() async {
-    final repo = await ref.read(saleRepositoryProvider.future);
-    final notifier = ref.read(notificationServiceProvider);
-    final evalFetcher = await ref.read(evaluationFetcherProvider.future);
-    final pages = ref.read(fetchPagesProvider);
-    // Show loading spinners on the two cards while the single sync runs.
-    ref.read(notificationsProvider.notifier).setLoading(true);
-    ref.read(evaluationsProvider.notifier).setLoading(true);
-    final outcome = await performSync(
-      repo: repo,
-      notifier: notifier,
-      evalFetcher: evalFetcher,
-      pages: pages,
-    );
-    if (!outcome.sale.isError && !outcome.sale.needsLogin) {
-      ref.read(notificationsProvider.notifier).setData(
-            outcome.sale.allNotifications,
-            outcome.sale.pagesFetched,
-          );
-    } else {
-      ref.read(notificationsProvider.notifier).setLoading(false);
-    }
-    if (!outcome.evaluations.needsLogin && outcome.evaluations.error == null) {
-      ref
-          .read(evaluationsProvider.notifier)
-          .setData(outcome.evaluations.items);
-    } else {
-      ref.read(evaluationsProvider.notifier).setLoading(false);
-    }
-    ref.read(lastSyncProvider.notifier).state = DateTime.now();
-    ref.invalidate(historyProvider);
+    ref.invalidate(homeSyncProvider);
+      await ref.read(homeSyncProvider.future);
     if (!mounted) return;
-    if (outcome.sale.needsLogin) {
+    final notif = ref.read(notificationsProvider);
+    if (notif.error != null && notif.error!.contains('ログイン')) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('ログインが必要です')),
       );
       _openWebLogin();
-    } else if (outcome.sale.isError) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('取得失敗: ${outcome.sale.errorMessage}')),
-      );
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(
-          '$pagesページ確認 / 新規 ${outcome.sale.newEvents.length}件',
-        )),
-      );
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    // Fires once per app session — kicks the startup fetch and lets
-    // the result update history/lastSync providers.
-    ref.watch(startupSyncProvider);
+    // Trigger startup sync on first build; re-runs whenever the
+    // provider is refreshed (pull-to-refresh, app resume).
+    ref.watch(homeSyncProvider);
     final history = ref.watch(historyProvider);
     final lastSync = ref.watch(lastSyncProvider);
     return Scaffold(
@@ -203,59 +173,75 @@ class _HomePageState extends ConsumerState<HomePage> {
           ),
         ],
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: _refresh,
-        icon: const Icon(Icons.refresh),
-        label: const Text('更新'),
-      ),
-      body: history.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(child: Text('Error: $e')),
-        data: (sales) {
-          final ongoing = sales.where((s) => s.endAt == null).toList();
-          final closed = sales.where((s) => s.endAt != null).toList();
-          final mostRecent = sales.isEmpty ? null : sales.first;
-          final prediction = ref.read(_predictorProvider).predict(sales);
-          return ListView(
-            padding: const EdgeInsets.all(16),
-            children: [
-              _sectionTitle(context, '今後のレビュー予約'),
-              _EvaluationsCard(),
-              const SizedBox(height: 16),
-              _sectionTitle(context, '現在のえばぽせーる'),
-              if (ongoing.isNotEmpty)
-                _saleCard(context, ongoing.first, ongoingHighlight: true)
-              else
-                const Card(
-                  child: ListTile(
-                    leading: Icon(Icons.toggle_off),
-                    title: Text('えばぽせーる 中ではありません'),
-                  ),
-                ),
-              const SizedBox(height: 16),
-              _sectionTitle(context, '直近のえばぽせーる'),
-              if (mostRecent != null)
-                _saleCard(context, mostRecent)
-              else
-                const Card(
-                  child: ListTile(
-                    leading: Icon(Icons.help_outline),
-                    title: Text('履歴はまだありません'),
-                  ),
-                ),
-              const SizedBox(height: 16),
-              _sectionTitle(context, '次回予測'),
-              _predictionCard(context, prediction, closed.length),
-              const SizedBox(height: 16),
-              if (lastSync != null)
-                Text(
-                  '最終取得: ${fmtJst(lastSync, _datePattern)}',
-                  style: Theme.of(context).textTheme.bodySmall,
-                  textAlign: TextAlign.center,
-                ),
+      body: RefreshIndicator(
+        onRefresh: _refresh,
+        child: history.when(
+          loading: () => ListView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            children: const [
+              SizedBox(
+                height: 400,
+                child: Center(child: CircularProgressIndicator()),
+              ),
             ],
-          );
-        },
+          ),
+          error: (e, _) => ListView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            children: [
+              SizedBox(
+                height: 400,
+                child: Center(child: Text('Error: $e')),
+              ),
+            ],
+          ),
+          data: (sales) {
+            final ongoing = sales.where((s) => s.endAt == null).toList();
+            final closed = sales.where((s) => s.endAt != null).toList();
+            final mostRecent = sales.isEmpty ? null : sales.first;
+            final prediction = ref.read(_predictorProvider).predict(sales);
+            return ListView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              padding: const EdgeInsets.all(16),
+              children: [
+                _sectionTitle(context, '今後のレビュー予約'),
+                _EvaluationsCard(),
+                const SizedBox(height: 16),
+                _sectionTitle(context, '現在のえばぽせーる'),
+                if (ongoing.isNotEmpty)
+                  _saleCard(context, ongoing.first, ongoingHighlight: true)
+                else
+                  const Card(
+                    child: ListTile(
+                      leading: Icon(Icons.toggle_off),
+                      title: Text('えばぽせーる 中ではありません'),
+                    ),
+                  ),
+                const SizedBox(height: 16),
+                _sectionTitle(context, '直近のえばぽせーる'),
+                if (mostRecent != null)
+                  _saleCard(context, mostRecent)
+                else
+                  const Card(
+                    child: ListTile(
+                      leading: Icon(Icons.help_outline),
+                      title: Text('履歴はまだありません'),
+                    ),
+                  ),
+                const SizedBox(height: 16),
+                _sectionTitle(context, '次回予測'),
+                _predictionCard(context, prediction, closed.length),
+                const SizedBox(height: 16),
+                if (lastSync != null)
+                  Text(
+                    '最終取得: ${fmtJst(lastSync, _datePattern)}',
+                    style: Theme.of(context).textTheme.bodySmall,
+                    textAlign: TextAlign.center,
+                  ),
+                const SizedBox(height: 32),
+              ],
+            );
+          },
+        ),
       ),
     );
   }

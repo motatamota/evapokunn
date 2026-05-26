@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/util/jst.dart';
+import 'home_page.dart';
 import 'notifications_state.dart';
 
 class NotificationsPage extends ConsumerStatefulWidget {
@@ -29,6 +30,11 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
     });
   }
 
+  Future<void> _onPullRefresh() async {
+    ref.invalidate(homeSyncProvider);
+    await ref.read(homeSyncProvider.future);
+  }
+
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(notificationsProvider);
@@ -40,15 +46,6 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('通知一覧'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            tooltip: '再取得',
-            onPressed: state.loading
-                ? null
-                : () => ref.read(notificationsProvider.notifier).refresh(),
-          ),
-        ],
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(56),
           child: Padding(
@@ -72,59 +69,75 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
           ),
         ),
       ),
-      body: Column(
-        children: [
-          if (state.loading) const LinearProgressIndicator(),
-          if (state.error != null)
-            Padding(
-              padding: const EdgeInsets.all(12),
-              child: Text(
-                'Error: ${state.error}',
-                style: const TextStyle(color: Colors.red),
+      body: RefreshIndicator(
+        onRefresh: _onPullRefresh,
+        child: Column(
+          children: [
+            if (state.loading) const LinearProgressIndicator(),
+            if (state.error != null)
+              Padding(
+                padding: const EdgeInsets.all(12),
+                child: Text(
+                  'Error: ${state.error}',
+                  style: const TextStyle(color: Colors.red),
+                ),
               ),
-            ),
-          if (state.fetchedAt != null)
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-              child: Text(
-                '取得: ${fmtJst(state.fetchedAt!, _pattern)} '
-                '・ ${state.pagesFetched}ページ ・ 表示 ${visible.length}件',
-                style: Theme.of(context).textTheme.bodySmall,
+            if (state.fetchedAt != null)
+              Padding(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                child: Text(
+                  '取得: ${fmtJst(state.fetchedAt!, _pattern)} '
+                  '・ ${state.pagesFetched}ページ ・ 表示 ${visible.length}件',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
               ),
-            ),
-          Expanded(child: _body(context, visible, state)),
-        ],
+            Expanded(child: _scrollableBody(visible, state)),
+          ],
+        ),
       ),
     );
   }
 
-  Widget _body(BuildContext context, List visible, NotificationsState state) {
+  /// Returns a scrollable widget so [RefreshIndicator] always has a
+  /// scrollable child — even for the empty / first-load states.
+  Widget _scrollableBody(List visible, NotificationsState state) {
     if (state.items.isEmpty && !state.loading && state.error == null) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Icon(Icons.refresh, size: 48, color: Colors.grey),
-              const SizedBox(height: 12),
-              const Text('右上の更新ボタンで通知を取得'),
-              const SizedBox(height: 16),
-              FilledButton.icon(
-                onPressed: () =>
-                    ref.read(notificationsProvider.notifier).refresh(),
-                icon: const Icon(Icons.download),
-                label: const Text('取得する'),
+      return ListView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        children: const [
+          SizedBox(
+            height: 400,
+            child: Center(
+              child: Padding(
+                padding: EdgeInsets.all(24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.swipe_down, size: 48, color: Colors.grey),
+                    SizedBox(height: 12),
+                    Text('下にスワイプで通知を取得'),
+                  ],
+                ),
               ),
-            ],
+            ),
           ),
-        ),
+        ],
       );
     }
     if (visible.isEmpty) {
-      return const Center(child: Text('該当する通知はありません'));
+      return ListView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        children: const [
+          SizedBox(
+            height: 400,
+            child: Center(child: Text('該当する通知はありません')),
+          ),
+        ],
+      );
     }
     return ListView.separated(
+      physics: const AlwaysScrollableScrollPhysics(),
       itemCount: visible.length,
       separatorBuilder: (_, __) => const Divider(height: 0),
       itemBuilder: (_, i) {

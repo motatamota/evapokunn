@@ -28,11 +28,13 @@
       "Read(//tmp/**)",
       "Bash(curl -fsSL -o cmdline-tools.zip \"https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip\")",
       "Bash(rm /tmp/cmdline-tools.zip 2>/dev/null; echo \"cleaned up\")",
-      "Bash(git ls-remote *)"
+      "Bash(git ls-remote *)",
+      "Bash(mkdir -p /mnt/c/Users/DELL/Desktop/42Tokyo/notify_app/.github/workflows && ls -la /mnt/c/Users/DELL/Desktop/42Tokyo/notify_app/.github/workflows/)"
     ],
     "additionalDirectories": [
       "/home/motata",
-      "/tmp"
+      "/tmp",
+      "/mnt/c/Users/DELL/Desktop/42Tokyo/notify_app/.github"
     ]
   }
 }

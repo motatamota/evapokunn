@@ -2,7 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 const _kFetchPagesKey = 'fetch_pages';
-const _kFetchPagesDefault = 1;
+const _kFetchPagesDefault = 3;
 const _kFetchPagesMin = 1;
 const _kFetchPagesMax = 30;
 

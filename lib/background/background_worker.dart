@@ -50,7 +50,7 @@ Future<void> runSaleCheck() async {
 
   try {
     final prefs = await SharedPreferences.getInstance();
-    final pages = prefs.getInt('fetch_pages') ?? 1;
+    final pages = prefs.getInt('fetch_pages') ?? 3;
     final result = await performSync(
       repo: repo,
       notifier: notifier,
