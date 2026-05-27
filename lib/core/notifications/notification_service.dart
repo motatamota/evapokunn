@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:timezone/data/latest_all.dart' as tzdata;
 import 'package:timezone/timezone.dart' as tz;
 
@@ -16,14 +17,27 @@ class NotificationService {
   static const _channelName = 'えばぽ君.exe';
   static const _channelDesc = 'えばぽせーる / レビュー予約のリマインダー';
 
-  static const _saleReminderIdBase = 10000;
+  /// One-shot notification fired the moment we detect a fresh
+  /// ongoing sale period (de-duped by sale start time).
+  static const _saleOneShotId = 30000;
+
+  /// Persisted marker: ms-since-epoch of the most recent sale whose
+  /// "detected" notification we've already fired. Lets us notify once
+  /// per sale instance even across background syncs.
+  static const _notifiedSaleStartKey = 'notified_sale_start_ms';
+
+  /// Old periodic reminder ID range — cancelled on startup so users
+  /// upgrading from the 9/12/15/18 schedule don't keep getting them.
+  static const _legacySaleReminderIdBase = 10000;
+  static const _legacySaleReminderCount = 28;
+
+  /// Evaluation reminders: every 30 minutes for the next 24 hours.
   static const _evalReminderIdBase = 20000;
-  static const _saleReminderHours = [9, 12, 15, 18];
-  static const _saleReminderDaysAhead = 7;
-  static const _evalReminderHoursAhead = 24;
+  static const _evalReminderIntervalMinutes = 30;
+  static const _evalReminderCount = 48;
 
   /// JST is the only schedule timezone we care about — the app is
-  /// Japan-centric and we want reminders to fire at "9 AM Tokyo"
+  /// Japan-centric and we want reminders to fire at Tokyo wall time
   /// regardless of the device timezone.
   late final tz.Location _jst;
 
@@ -67,52 +81,48 @@ class NotificationService {
         iOS: DarwinNotificationDetails(),
       );
 
-  /// Reschedule sale reminders.
+  /// Call on every sync. Fires a one-shot notification the first time
+  /// we observe a given sale instance (identified by its start time),
+  /// then stays silent for that same sale until it ends.
   ///
-  /// [ongoing] true → cancel previous reminders and book a new set at
-  /// 9/12/15/18 JST for the next [_saleReminderDaysAhead] days.
-  /// [ongoing] false → just cancel all booked sale reminders.
-  Future<void> setOngoingSaleReminders({required bool ongoing}) async {
+  /// Passing [saleStartAt] = null means no ongoing sale; resets the
+  /// dedup marker so the next sale will fire its own notification.
+  Future<void> notifyOngoingSale({DateTime? saleStartAt}) async {
     await init();
-    await _cancelRange(
-      _saleReminderIdBase,
-      _saleReminderDaysAhead * _saleReminderHours.length,
-    );
-    if (!ongoing) return;
+    // Sweep any leftover scheduled periodic reminders from older
+    // versions (the 9/12/15/18 schedule).
+    await _cancelRange(_legacySaleReminderIdBase, _legacySaleReminderCount);
 
-    final now = tz.TZDateTime.now(_jst);
-    var id = _saleReminderIdBase;
-    for (var d = 0; d < _saleReminderDaysAhead; d++) {
-      for (final h in _saleReminderHours) {
-        final t = tz.TZDateTime(_jst, now.year, now.month, now.day, h)
-            .add(Duration(days: d));
-        if (!t.isAfter(now)) continue;
-        await _scheduleAt(
-          id++,
-          t,
-          'えばぽせーる開催中',
-          'まだ間に合う！レビューしてポイント獲得',
-        );
-      }
+    final prefs = await SharedPreferences.getInstance();
+    if (saleStartAt == null) {
+      await prefs.remove(_notifiedSaleStartKey);
+      return;
     }
+
+    final ms = saleStartAt.millisecondsSinceEpoch;
+    if (prefs.getInt(_notifiedSaleStartKey) == ms) return;
+
+    await _plugin.show(
+      _saleOneShotId,
+      'えばぽせーる開催中!',
+      '今がチャンス！レビューしてポイント獲得',
+      _details,
+    );
+    await prefs.setInt(_notifiedSaleStartKey, ms);
   }
 
-  /// Reschedule evaluation reminders (hourly for the next 24h).
+  /// Schedules a reminder every 30 minutes for the next 24 hours when
+  /// there are pending review reservations.
   Future<void> setEvaluationReminders({required bool hasEvaluations}) async {
     await init();
-    await _cancelRange(_evalReminderIdBase, _evalReminderHoursAhead);
+    await _cancelRange(_evalReminderIdBase, _evalReminderCount);
     if (!hasEvaluations) return;
 
     final now = tz.TZDateTime.now(_jst);
     var id = _evalReminderIdBase;
-    for (var h = 1; h <= _evalReminderHoursAhead; h++) {
-      final t = now.add(Duration(hours: h));
-      await _scheduleAt(
-        id++,
-        t,
-        'レビュー予約あり',
-        'スケジュールを確認してね',
-      );
+    for (var i = 1; i <= _evalReminderCount; i++) {
+      final t = now.add(Duration(minutes: i * _evalReminderIntervalMinutes));
+      await _scheduleAt(id++, t, 'レビュー予約あり', 'スケジュールを確認してね');
     }
   }
 

@@ -26,7 +26,9 @@ Future<SyncOutcome> performSync({
 
   if (!saleResult.isError && !saleResult.needsLogin) {
     final ongoing = await repo.ongoing();
-    await notifier.setOngoingSaleReminders(ongoing: ongoing != null);
+    // One-shot notification fired only the first time we see this
+    // particular sale instance; resets when no sale is ongoing.
+    await notifier.notifyOngoingSale(saleStartAt: ongoing?.startAt);
   }
   if (!evalResult.needsLogin && evalResult.error == null) {
     await notifier.setEvaluationReminders(
