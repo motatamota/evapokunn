@@ -25,6 +25,35 @@ class _WebLoginPageState extends State<WebLoginPage> {
   String _currentUrl = '$baseUrl/';
 
   @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _showIntraVersionWarning());
+  }
+
+  Future<void> _showIntraVersionWarning() async {
+    if (!mounted) return;
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        icon: const Icon(Icons.warning_amber, color: Colors.orange, size: 32),
+        title: const Text('intra v2 を利用します'),
+        content: const Text(
+          'このアプリは intra v2 (profile.intra.42.fr) からデータを取得します。\n\n'
+          'intra v3 を使っているとアプリは動作しません。intra の設定で '
+          'v2 に切り替えてからログインしてください。',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('了解'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(

@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
 import '../../../core/auth/auth_service.dart';
 import '../../../core/auth/auth_status.dart';
 import '../../../core/auth/web_login_page.dart';
@@ -25,7 +27,37 @@ final historyProvider = FutureProvider<List<Sale>>((ref) async {
   return repo.history();
 });
 
-final lastSyncProvider = StateProvider<DateTime?>((_) => null);
+const _kLastSyncKey = 'last_sync_at';
+
+/// Persisted across launches AND across the foreground/background
+/// boundary, so the displayed "最終取得" reflects whatever sync ran
+/// most recently — including the 30-min Workmanager job.
+final lastSyncProvider =
+    StateNotifierProvider<LastSyncNotifier, DateTime?>((ref) {
+  return LastSyncNotifier(ref.watch(sharedPrefsProvider));
+});
+
+class LastSyncNotifier extends StateNotifier<DateTime?> {
+  LastSyncNotifier(this._prefs) : super(_load(_prefs));
+  final SharedPreferences _prefs;
+
+  static DateTime? _load(SharedPreferences prefs) {
+    final ms = prefs.getInt(_kLastSyncKey);
+    return ms == null ? null : DateTime.fromMillisecondsSinceEpoch(ms);
+  }
+
+  /// Re-reads from disk. Called when the app resumes so an update
+  /// written by the background worker becomes visible.
+  void reload() {
+    state = _load(_prefs);
+  }
+
+  Future<void> markSynced() async {
+    final now = DateTime.now();
+    state = now;
+    await _prefs.setInt(_kLastSyncKey, now.millisecondsSinceEpoch);
+  }
+}
 
 /// Pulls `fetch_pages` worth of notifications and pushes the result
 /// into every UI state.
@@ -63,7 +95,7 @@ final homeSyncProvider = FutureProvider<void>((ref) async {
           .read(evaluationsProvider.notifier)
           .setData(outcome.evaluations.items);
     }
-    ref.read(lastSyncProvider.notifier).state = DateTime.now();
+    await ref.read(lastSyncProvider.notifier).markSynced();
     ref.invalidate(historyProvider);
   } catch (_) {
     // Best effort; user can still manually refresh.
@@ -100,6 +132,9 @@ class _HomePageState extends ConsumerState<HomePage>
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state != AppLifecycleState.resumed) return;
+    // The background worker may have written a fresh timestamp while
+    // we were paused — re-read the persisted value so the UI reflects it.
+    ref.read(lastSyncProvider.notifier).reload();
     final last = ref.read(lastSyncProvider);
     if (last != null && DateTime.now().difference(last) < _resumeThrottle) {
       return;
@@ -122,7 +157,7 @@ class _HomePageState extends ConsumerState<HomePage>
 
   Future<void> _refresh() async {
     ref.invalidate(homeSyncProvider);
-      await ref.read(homeSyncProvider.future);
+    await ref.read(homeSyncProvider.future);
     if (!mounted) return;
     final notif = ref.read(notificationsProvider);
     if (notif.error != null && notif.error!.contains('ログイン')) {

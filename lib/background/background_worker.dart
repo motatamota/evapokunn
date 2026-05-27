@@ -64,6 +64,13 @@ Future<void> runSaleCheck() async {
       return;
     }
     await backoff.noteSuccess();
+    // Persist the timestamp so the UI shows when the background
+    // worker last completed (must match the key in
+    // home_page.dart's lastSyncProvider).
+    await prefs.setInt(
+      'last_sync_at',
+      DateTime.now().millisecondsSinceEpoch,
+    );
   } finally {
     await db.close();
   }

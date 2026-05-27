@@ -35,7 +35,7 @@ Future<void> main() async {
         await Workmanager().registerPeriodicTask(
           saleCheckUniqueName,
           saleCheckTask,
-          frequency: const Duration(hours: 2),
+          frequency: const Duration(minutes: 30),
           constraints: Constraints(networkType: NetworkType.connected),
           existingWorkPolicy: ExistingWorkPolicy.keep,
         );
